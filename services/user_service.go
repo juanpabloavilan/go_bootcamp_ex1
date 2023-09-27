@@ -1,142 +1,74 @@
 package services
 
 import (
-	"errors"
+	"example/bootcamp_ex1/db"
 	"example/bootcamp_ex1/entities"
+
+	"log/slog"
 
 	"github.com/google/uuid"
 )
 
-var (
-	ErrUserNotFound = errors.New("cannot find a user with this id")
-)
-
-// Creating initial users using a helper
-func createInitialUsers() userMap {
-	usersMap := userMap{}
-	initialUsers := []entities.User{
-		{
-			Name:     "Leo",
-			LastName: "Messi",
-			Email:    "leo.messi@gmail.com",
-			Active:   true,
-			Address: entities.Address{
-				City:          "Miami",
-				Country:       "USA",
-				AddressString: "Avenida 112f # 88 - 15",
-			},
-		},
-		{
-			Name:     "Cristiano",
-			LastName: "Ronaldo",
-			Email:    "cr7.@gmail.com",
-			Active:   true,
-			Address: entities.Address{
-				City:          "Abu Dhabi",
-				Country:       "Emiratos Arabes",
-				AddressString: "Cra 112f # 88 - 15",
-			},
-		},
-		{
-			Name:     "Kilian",
-			LastName: "Mbappe",
-			Email:    "mbappe.@gmail.com",
-			Active:   true,
-			Address: entities.Address{
-				City:          "Paris",
-				Country:       "Francia",
-				AddressString: "Rue 112f # 88 - 15",
-			},
-		},
-		{
-			Name:     "Joao",
-			LastName: "Felix",
-			Email:    "felix.@gmail.com",
-			Active:   true,
-			Address: entities.Address{
-				City:          "Barcelona",
-				Country:       "España",
-				AddressString: "Calle 112f # 88 - 15",
-			},
-		},
-		{
-			Name:     "Robert",
-			LastName: "Lewandoski",
-			Email:    "lewandoski.@gmail.com",
-			Active:   true,
-			Address: entities.Address{
-				City:          "Barcelona",
-				Country:       "España",
-				AddressString: "Calle 112f # 88 - 18",
-			},
-		},
-	}
-	// Creating uuid for map key and also for user id property
-	for _, u := range initialUsers {
-		id := uuid.New()
-		u.Id = id
-		usersMap[id] = u
-	}
-
-	return usersMap
+type UserService struct {
+	Storage db.Storage
 }
 
-type userMap map[uuid.UUID]entities.User
-
-type userService struct {
-	users userMap
+func NewUserService(storage db.Storage) *UserService {
+	return &UserService{Storage: storage}
 }
 
-func NewUserService() *userService {
-	userService := userService{users: createInitialUsers()}
-	return &userService
+func (u *UserService) Get(id uuid.UUID) (entities.User, error) {
+	//Log action
+	slog.Info("Getting a user by id", id)
+	return u.Storage.Get(id)
 }
 
-func (u *userService) Create(user entities.User) uuid.UUID {
+func (u *UserService) GetAll() ([]entities.User, error) {
+	//Log action
+	slog.Info("Logging all users")
+	//Return slice of users
+	return u.Storage.GetAll()
+}
+
+func (u *UserService) Create(userReq entities.UserRequest) (uuid.UUID, error) {
 	id := uuid.New()
-	user.Id = id
-	u.users[id] = user
-	return id
-}
-
-func (u *userService) Get(key uuid.UUID) (entities.User, error) {
-	value, ok := u.users[key]
-	//If user doesn't exist we return a nil value and a error
-	if !ok {
-		return entities.User{}, ErrUserNotFound
+	newUser := entities.User{
+		Id:       id,
+		Name:     userReq.Name,
+		LastName: userReq.LastName,
+		Email:    userReq.Email,
+		Address:  userReq.Address,
+		Active:   userReq.Active,
 	}
-	return value, nil
-}
+	//Log action
+	slog.Info("Creating user: ", newUser)
 
-func (u *userService) GetAll() []entities.User {
-	userList := make([]entities.User, 0, len(u.users))
-	for _, user := range u.users {
-		userList = append(userList, user)
-	}
-	return userList
-}
-
-func (u *userService) Update(key uuid.UUID, newUser entities.User) (entities.User, error) {
-	// If not exists return error
-	_, err := u.Get(key)
+	id, err := u.Storage.Create(newUser)
 	if err != nil {
-		return entities.User{}, err
+		return uuid.UUID{}, err
 	}
-	// update
-	newUser.Id = key
-	u.users[key] = newUser
 
-	return u.users[key], nil
+	return id, nil
 }
-func (u *userService) Delete(key uuid.UUID) error {
-	// If not exists return error
-	_, err := u.Get(key)
-	if err != nil {
-		return err
+
+func (u *UserService) Update(id uuid.UUID, userReq entities.UserRequest) (entities.User, error) {
+	newUser := entities.User{
+		Id:       id,
+		Name:     userReq.Name,
+		LastName: userReq.LastName,
+		Email:    userReq.Email,
+		Address:  userReq.Address,
+		Active:   userReq.Active,
 	}
-	// delete
-	delete(u.users, key)
-	return nil
+
+	//Log action
+	slog.Info("Update user: ", newUser)
+	return u.Storage.Update(id, newUser)
+}
+
+func (u *UserService) Delete(id uuid.UUID) (uuid.UUID, error) {
+	slog.Info("Deleting user: ", id)
+	return u.Storage.Delete(id)
 }
 
 //métodos create, get, get all, update y delete. Este struct debe ser privado y debe contar con un método constructor.
