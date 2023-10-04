@@ -11,56 +11,58 @@ var (
 	ErrUserNotFound = errors.New("cannot find a user with this id")
 )
 
-type userMap map[uuid.UUID]entities.User
-
-type memoryStorage struct {
-	users userMap
+type memoryStorage[T entities.StorageObject] struct {
+	entities map[uuid.UUID]T
 }
 
-func NewMemoryStorage() *memoryStorage {
-	return &memoryStorage{users: userMap{}}
+func NewMemoryStorage[T entities.StorageObject]() *memoryStorage[T] {
+	return &memoryStorage[T]{
+		entities: make(map[uuid.UUID]T),
+	}
 }
 
-func (u *memoryStorage) Create(user entities.User) (uuid.UUID, error) {
-	id := user.Id
-	u.users[id] = user
+func (m *memoryStorage[T]) Create(thing T) (uuid.UUID, error) {
+	id := thing.GetId()
+	m.entities[id] = thing
 	return id, nil
 }
 
-func (u *memoryStorage) Get(key uuid.UUID) (entities.User, error) {
-	value, ok := u.users[key]
+func (m *memoryStorage[T]) Get(key uuid.UUID) (T, error) {
+	value, ok := m.entities[key]
 	//If user doesn't exist we return a nil value and a error
 	if !ok {
-		return entities.User{}, ErrUserNotFound
+		var zeroValue T
+		return zeroValue, ErrUserNotFound
 	}
 	return value, nil
 }
 
-func (u *memoryStorage) GetAll() ([]entities.User, error) {
-	userList := make([]entities.User, 0, len(u.users))
-	for _, user := range u.users {
+func (u *memoryStorage[T]) GetAll() ([]T, error) {
+	userList := make([]T, 0, len(u.entities))
+	for _, user := range u.entities {
 		userList = append(userList, user)
 	}
 	return userList, nil
 }
 
-func (u *memoryStorage) Update(key uuid.UUID, newUser entities.User) (entities.User, error) {
+func (u *memoryStorage[T]) Update(key uuid.UUID, newUser T) (T, error) {
 	// If not exists return error
 	_, err := u.Get(key)
 	if err != nil {
-		return entities.User{}, err
+		var zeroValue T
+		return zeroValue, ErrUserNotFound
 	}
-	u.users[key] = newUser
+	u.entities[key] = newUser
 
-	return u.users[key], nil
+	return u.entities[key], nil
 }
-func (u *memoryStorage) Delete(key uuid.UUID) (uuid.UUID, error) {
+func (u *memoryStorage[T]) Delete(key uuid.UUID) (uuid.UUID, error) {
 	// If not exists return error
 	_, err := u.Get(key)
 	if err != nil {
 		return uuid.Nil, err
 	}
 	// delete
-	delete(u.users, key)
+	delete(u.entities, key)
 	return key, nil
 }

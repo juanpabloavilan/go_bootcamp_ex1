@@ -10,24 +10,26 @@ import (
 )
 
 type UserService struct {
-	Storage db.Storage
+	storage db.Storage[entities.User]
 }
 
-func NewUserService(storage db.Storage) *UserService {
-	return &UserService{Storage: storage}
+func NewUserService(storage db.Storage[entities.User]) *UserService {
+	userService := new(UserService)
+	userService.storage = storage
+	return userService
 }
 
 func (u *UserService) Get(id uuid.UUID) (entities.User, error) {
 	//Log action
 	slog.Info("Getting a user by id", id)
-	return u.Storage.Get(id)
+	return u.storage.Get(id)
 }
 
 func (u *UserService) GetAll() ([]entities.User, error) {
 	//Log action
 	slog.Info("Logging all users")
 	//Return slice of users
-	return u.Storage.GetAll()
+	return u.storage.GetAll()
 }
 
 func (u *UserService) Create(userReq entities.UserRequest) (uuid.UUID, error) {
@@ -43,7 +45,7 @@ func (u *UserService) Create(userReq entities.UserRequest) (uuid.UUID, error) {
 	//Log action
 	slog.Info("Creating user: ", newUser)
 
-	id, err := u.Storage.Create(newUser)
+	id, err := u.storage.Create(newUser)
 	if err != nil {
 		return uuid.UUID{}, err
 	}
@@ -63,12 +65,12 @@ func (u *UserService) Update(id uuid.UUID, userReq entities.UserRequest) (entiti
 
 	//Log action
 	slog.Info("Update user: ", newUser)
-	return u.Storage.Update(id, newUser)
+	return u.storage.Update(id, newUser)
 }
 
 func (u *UserService) Delete(id uuid.UUID) (uuid.UUID, error) {
 	slog.Info("Deleting user: ", id)
-	return u.Storage.Delete(id)
+	return u.storage.Delete(id)
 }
 
 //métodos create, get, get all, update y delete. Este struct debe ser privado y debe contar con un método constructor.

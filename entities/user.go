@@ -4,6 +4,10 @@ import (
 	"github.com/google/uuid"
 )
 
+type StorageObject interface {
+	GetId() uuid.UUID
+}
+
 type User struct {
 	Id       uuid.UUID `json:"id"`
 	Name     string    `json:"name"`
@@ -11,6 +15,10 @@ type User struct {
 	Email    string    `json:"email"`
 	Active   bool      `json:"active"`
 	Address  Address   `json:"address"`
+}
+
+func (u User) GetId() uuid.UUID {
+	return u.Id
 }
 
 type UserRequest struct {

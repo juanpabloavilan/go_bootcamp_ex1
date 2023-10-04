@@ -141,6 +141,7 @@ func DeleteUser(userService *services.UserService) func(w http.ResponseWriter, r
 		if err != nil {
 			sendError(w, r, "Error", http.StatusNotFound, err.Error())
 			return
+
 		}
 
 		w.Header().Set("Content-Type", "application/json")

@@ -6,10 +6,10 @@ import (
 	"github.com/google/uuid"
 )
 
-type Storage interface {
-	Get(id uuid.UUID) (entities.User, error)
-	GetAll() ([]entities.User, error)
-	Create(entities.User) (uuid.UUID, error)
-	Update(id uuid.UUID, user entities.User) (entities.User, error)
+type Storage[T entities.StorageObject] interface {
+	Get(id uuid.UUID) (T, error)
+	GetAll() ([]T, error)
+	Create(thing T) (uuid.UUID, error)
+	Update(id uuid.UUID, thing T) (T, error)
 	Delete(id uuid.UUID) (uuid.UUID, error)
 }

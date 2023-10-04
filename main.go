@@ -2,9 +2,9 @@ package main
 
 import (
 	"example/bootcamp_ex1/db"
+	"example/bootcamp_ex1/entities"
 	"example/bootcamp_ex1/handlers"
 	"example/bootcamp_ex1/services"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -28,14 +28,14 @@ func main() {
 	slog.Info("ENVIRONMENT: ", os.Getenv(ENV_STAGE), os.Getenv(ENV_STORAGE))
 
 	// Selecting storage from .env
-	var storage db.Storage
+	var storage db.Storage[entities.User]
 
 	switch os.Getenv(ENV_STORAGE) {
 
 	case STORAGE_MEMORY:
-		storage = db.NewMemoryStorage()
+		storage = db.NewMemoryStorage[entities.User]()
 	case STORAGE_REDIS:
-		storage = db.NewRedisStorage()
+		storage = db.NewRedisStorage[entities.User]()
 	default:
 		slog.Error(ErrNotValidStorage, os.Getenv(ENV_STORAGE))
 
@@ -53,5 +53,5 @@ func main() {
 	userRouter.HandleFunc("/{id}", handlers.DeleteUser(userService)).Methods("DELETE")
 
 	// Bind to a port and pass our router in
-	log.Fatal(http.ListenAndServe(":8000", r))
+	slog.Error(http.ListenAndServe(":8000", r).Error())
 }

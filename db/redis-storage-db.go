@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"reflect"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -20,18 +21,22 @@ var (
 	ErrMarshalingRecord   = errors.New("error unmarshaling record")
 )
 
-type redisStorage struct {
+type redisStorage[T entities.StorageObject] struct {
 	client *redis.Client
 	prefix string
 }
 
-func NewRedisStorage() *redisStorage {
-
-	client := redis.NewClient(&redis.Options{
+func NewRedisStorage[T entities.StorageObject]() *redisStorage[T] {
+	redisStorage := new(redisStorage[T])
+	// Creating and assigning client
+	redisStorage.client = redis.NewClient(&redis.Options{
 		Addr: os.Getenv("REDIS_HOST"),
 	})
-	ctx := context.Background()
-	_, err := client.Ping(ctx).Result()
+	// Assigning prefix to search in redis. it has the form of "entityType:id" "user:b6cfb84-4831-429e-a61b-4d28b154fb8c"
+	redisStorage.prefix = reflect.TypeOf(new(T)).String() + ":"
+
+	// Verifying Connection
+	_, err := redisStorage.client.Ping(context.Background()).Result()
 
 	if err != nil {
 		slog.Error(ErrConnectionFailed.Error(), err)
@@ -39,20 +44,21 @@ func NewRedisStorage() *redisStorage {
 	}
 	slog.Info("Connection succesful with redis")
 
-	return &redisStorage{client: client, prefix: "user:"}
+	// Returning instance
+	return redisStorage
 }
 
-func (r *redisStorage) Get(id uuid.UUID) (entities.User, error) {
+func (r *redisStorage[T]) Get(id uuid.UUID) (T, error) {
 	return r.getValueCache(id.String())
 }
 
-func (r *redisStorage) GetAll() ([]entities.User, error) {
+func (r *redisStorage[T]) GetAll() ([]T, error) {
 	return r.getAllValuesCache()
 }
 
-func (r *redisStorage) Create(user entities.User) (uuid.UUID, error) {
-	id := user.Id
-	err := r.setValueCache(id.String(), user)
+func (r *redisStorage[T]) Create(thing T) (uuid.UUID, error) {
+	id := thing.GetId()
+	err := r.setValueCache(id.String(), thing)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -60,30 +66,32 @@ func (r *redisStorage) Create(user entities.User) (uuid.UUID, error) {
 	return id, nil
 }
 
-func (r *redisStorage) Update(id uuid.UUID, user entities.User) (entities.User, error) {
-	//If user not exists return error
+func (r *redisStorage[T]) Update(id uuid.UUID, thing T) (T, error) {
+	//If thing not exists return error
 	_, err := r.Get(id)
+	var zeroValue T
 	if err != nil {
-		return entities.User{}, err
+		return zeroValue, err
 	}
 	//Updating new record
-	err = r.setValueCache(id.String(), user)
+	err = r.setValueCache(id.String(), thing)
 	if err != nil {
-		return entities.User{}, err
+		return zeroValue, err
 	}
 
-	return user, nil
+	return thing, nil
 
 }
 
-func (r *redisStorage) Delete(id uuid.UUID) (uuid.UUID, error) {
-	//If user not exists return error
+func (r *redisStorage[T]) Delete(id uuid.UUID) (uuid.UUID, error) {
+	//If thing not exists return error
 	_, err := r.Get(id)
 	if err != nil {
 		return uuid.Nil, err
 	}
-	// Delete user
-	err = r.deleteValueCache(id.String())
+	// Delete thing
+	key := r.prefix + id.String()
+	err = r.client.Del(context.Background(), key).Err()
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -92,14 +100,14 @@ func (r *redisStorage) Delete(id uuid.UUID) (uuid.UUID, error) {
 
 }
 
-func (r *redisStorage) setValueCache(key string, user entities.User) error {
+func (r *redisStorage[T]) setValueCache(key string, thing T) error {
 	ctx := context.Background()
-	serialized, err := marshalUser(user)
+	serialized, err := json.Marshal(thing)
 	if err != nil {
-		return err
+		return ErrMarshalingRecord
 	}
 	key = r.prefix + key
-	err = r.client.Set(ctx, key, serialized, 0).Err()
+	err = r.client.Set(ctx, key, string(serialized), 0).Err()
 	if err != nil {
 		slog.Error(err.Error())
 		return err
@@ -108,26 +116,36 @@ func (r *redisStorage) setValueCache(key string, user entities.User) error {
 	return nil
 }
 
-func (r *redisStorage) getValueCache(key string) (entities.User, error) {
+func (r *redisStorage[T]) getValueCache(key string) (T, error) {
+	// Try to get the value
 	ctx := context.Background()
 	key = r.prefix + key
 	value, err := r.client.Get(ctx, key).Result()
+
+	// Handle error
+	var zeroValue T
 	if err != nil {
 		slog.Error(err.Error())
-		return entities.User{}, ErrUserNotFound
+		return zeroValue, ErrUserNotFound
+	}
+	// Try to deserialized
+	deserialized := new(T)
+	err = json.Unmarshal([]byte(value), deserialized)
+	//Handle deserialized error
+	if err != nil {
+		return zeroValue, ErrUnmarshalingRecord
 	}
 
-	return unmarshalUser(value)
+	return *deserialized, nil
 
 }
 
-func (r *redisStorage) getAllValuesCache() ([]entities.User, error) {
-	// Getting all the keys of the existing user records
+func (r *redisStorage[T]) getAllValuesCache() ([]T, error) {
+	// Getting all the keys of the existing thing records
 	ctx := context.Background()
 	prefix := r.prefix + "*"
 	iter := r.client.Scan(ctx, 0, prefix, 0).Iterator()
-	users := make([]entities.User, 0)
-
+	things := make([]T, 0)
 	keys := make([]string, 0)
 
 	for iter.Next(ctx) {
@@ -139,51 +157,26 @@ func (r *redisStorage) getAllValuesCache() ([]entities.User, error) {
 		return nil, err
 	}
 
+	if len(keys) == 0 {
+		return things, nil
+	}
 	values, err := r.client.MGet(ctx, keys...).Result()
+
 	if err != nil {
 		slog.Error(err.Error())
-		return []entities.User{}, ErrConsultingRecords
+		return nil, ErrConsultingRecords
 	}
 
 	for _, val := range values {
 		jsonValue := fmt.Sprint(val)
-		user, err := unmarshalUser(jsonValue)
+		currentThing := new(T)
+		err := json.Unmarshal([]byte(jsonValue), currentThing)
 		if err != nil {
 			return nil, err
 		}
 
-		users = append(users, user)
+		things = append(things, *currentThing)
 	}
 
-	return users, nil
-}
-
-func (r *redisStorage) deleteValueCache(key string) error {
-	key = r.prefix + key
-	return r.client.Del(context.Background(), key).Err()
-
-}
-
-func marshalUser(user entities.User) ([]byte, error) {
-	//Marshaling user
-	serialized, err := json.Marshal(user)
-	if err != nil {
-		slog.Error(err.Error())
-		return nil, ErrMarshalingRecord
-	}
-
-	return serialized, nil
-
-}
-
-func unmarshalUser(jsonValue string) (entities.User, error) {
-	//Unmarshaling json user values
-	var deserializedUser entities.User
-	err := json.Unmarshal([]byte(jsonValue), &deserializedUser)
-	if err != nil {
-		slog.Error(err.Error())
-		return entities.User{}, ErrUnmarshalingRecord
-	}
-
-	return deserializedUser, nil
+	return things, nil
 }
