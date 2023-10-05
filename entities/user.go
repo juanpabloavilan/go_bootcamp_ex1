@@ -1,22 +1,36 @@
 package entities
 
-import "github.com/google/uuid"
+import (
+	"github.com/google/uuid"
+)
 
-type User struct {
-	Id       uuid.UUID
-	Name     string
-	LastName string
-	Email    string
-	Active   bool
-	Address  Address
+type StorageObject interface {
+	GetId() uuid.UUID
 }
 
-// func (u User) NewUser(name string, lastname string, email string, active bool, address Address) User {
-// 	return User{
-// 		Name:     name,
-// 		LastName: lastname,
-// 		Email:    email,
-// 		Active:   active,
-// 		Address:  address,
-// 	}
-// }
+type User struct {
+	Id       uuid.UUID `json:"id"`
+	Name     string    `json:"name"`
+	LastName string    `json:"lastname"`
+	Email    string    `json:"email"`
+	Active   bool      `json:"active"`
+	Address  Address   `json:"address"`
+}
+
+func (u User) GetId() uuid.UUID {
+	return u.Id
+}
+
+type UserRequest struct {
+	Name     string  `json:"name" validate:"required"`
+	LastName string  `json:"lastname" validate:"required"`
+	Email    string  `json:"email" validate:"required"`
+	Active   bool    `json:"active"`
+	Address  Address `json:"address" validate:"required"`
+}
+
+type Address struct {
+	City          string `json:"city" validate:"required"`
+	Country       string `json:"country" validate:"required"`
+	AddressString string `json:"address_string" validate:"required"`
+}

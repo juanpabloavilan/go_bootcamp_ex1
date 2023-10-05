@@ -1,42 +1,57 @@
 package main
 
 import (
+	"example/bootcamp_ex1/db"
 	"example/bootcamp_ex1/entities"
+	"example/bootcamp_ex1/handlers"
 	"example/bootcamp_ex1/services"
-	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+
+	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
+)
+
+const (
+	ENV_STAGE      = "STAGE"
+	ENV_STORAGE    = "STORAGE"
+	STORAGE_REDIS  = "REDIS"
+	STORAGE_MEMORY = "MEMORY"
+
+	ErrNotValidStorage = "storage is not valid"
 )
 
 func main() {
-	//Creating a user service
-	userService := services.NewUserService()
+	// Loading env variables
+	godotenv.Load()
+	slog.Info("ENVIRONMENT: ", os.Getenv(ENV_STAGE), os.Getenv(ENV_STORAGE))
 
-	userList := userService.GetAll()
-	fmt.Printf("\nPrinting all users \n %+v \n\n", userList)
+	// Selecting storage from .env
+	var storage db.Storage[entities.User]
 
-	//Getting one user ID
-	userId := userList[0].Id
+	switch os.Getenv(ENV_STORAGE) {
 
-	user, _ := userService.Get(userId)
-	fmt.Printf("\nGet a user by id: %q \n  %+v \n\n", userId, user)
+	case STORAGE_MEMORY:
+		storage = db.NewMemoryStorage[entities.User]()
+	case STORAGE_REDIS:
+		storage = db.NewRedisStorage[entities.User]()
+	default:
+		slog.Error(ErrNotValidStorage, os.Getenv(ENV_STORAGE))
 
-	user, _ = userService.Update(userId, entities.User{
-		Name:     "Michaer",
-		LastName: "Neuer",
-		Email:    "neuer@gmail.com",
-		Active:   false,
-		Address: entities.Address{
-			City:          "Munich",
-			Country:       "Alemania",
-			AddressString: "Munich stadium",
-		},
-	})
-	fmt.Printf("\nUpdate a user \n %+v \n\n", user)
+	}
 
-	fmt.Printf("\n Printing all users\n %+v \n\n", userService.GetAll())
+	userService := services.NewUserService(storage)
 
-	userService.Delete(userId)
-	fmt.Printf("\nDelete a user %q \n\n", userId)
+	r := mux.NewRouter()
+	// Declaring user subrouter
+	userRouter := r.PathPrefix("/user").Subrouter()
+	userRouter.HandleFunc("/", handlers.GetAllUsers(userService)).Methods("GET")
+	userRouter.HandleFunc("/{id}", handlers.GetUserById(userService)).Methods("GET")
+	userRouter.HandleFunc("/", handlers.CreateUser(userService)).Methods("POST")
+	userRouter.HandleFunc("/{id}", handlers.UpdateUser(userService)).Methods("PUT")
+	userRouter.HandleFunc("/{id}", handlers.DeleteUser(userService)).Methods("DELETE")
 
-	fmt.Printf("Getting all users\n %+v \n\n", userService.GetAll())
-
+	// Bind to a port and pass our router in
+	slog.Error(http.ListenAndServe(":8000", r).Error())
 }
