@@ -21,7 +21,7 @@ func NewUserService(storage db.Storage[entities.User]) *UserService {
 
 func (u *UserService) Get(id uuid.UUID) (entities.User, error) {
 	//Log action
-	slog.Info("Getting a user by id", id.String())
+	slog.Info("Getting a user by id", "id", id.String())
 	user, err := u.storage.Get(id)
 	if err != nil {
 		return entities.User{}, err
@@ -47,7 +47,7 @@ func (u *UserService) Create(userReq entities.UserRequest) (uuid.UUID, error) {
 		Active:   userReq.Active,
 	}
 	//Log action
-	slog.Info("Creating user: ", newUser)
+	slog.Info("Creating user ", "newUser", newUser)
 
 	return u.storage.Create(newUser)
 
@@ -64,11 +64,11 @@ func (u *UserService) Update(id uuid.UUID, userReq entities.UserRequest) (entiti
 	}
 
 	//Log action
-	slog.Info("Update user: ", newUser)
+	slog.Info("Update user", "newUser", newUser)
 	return u.storage.Update(id, newUser)
 }
 
 func (u *UserService) Delete(id uuid.UUID) (uuid.UUID, error) {
-	slog.Info("Deleting user: ", id.String())
+	slog.Info("Deleting user", "id", id.String())
 	return u.storage.Delete(id)
 }
