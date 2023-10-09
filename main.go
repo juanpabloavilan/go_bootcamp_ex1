@@ -23,6 +23,8 @@ const (
 )
 
 func main() {
+	customLogger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(customLogger)
 	// Loading env variables
 	godotenv.Load()
 	slog.Info("ENVIRONMENT: ", os.Getenv(ENV_STAGE), os.Getenv(ENV_STORAGE))
