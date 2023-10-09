@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"example/bootcamp_ex1/entities"
 	"fmt"
 	"log/slog"
@@ -12,13 +11,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
-)
-
-var (
-	ErrConnectionFailed   = errors.New("couldn't connect to database")
-	ErrConsultingRecords  = errors.New("error consulting records")
-	ErrUnmarshalingRecord = errors.New("error unmarshaling record")
-	ErrMarshalingRecord   = errors.New("error unmarshaling record")
 )
 
 type redisStorage[T entities.StorageObject] struct {
@@ -39,7 +31,10 @@ func NewRedisStorage[T entities.StorageObject]() *redisStorage[T] {
 	_, err := redisStorage.client.Ping(context.Background()).Result()
 
 	if err != nil {
-		slog.Error(ErrConnectionFailed.Error(), err)
+		err = StorageError{
+			Code:        RedisConnectionFailed,
+			Description: fmt.Sprintf("error connecting with database %q", err),
+		}
 		panic(err)
 	}
 	slog.Info("Connection succesful with redis")
@@ -78,7 +73,6 @@ func (r *redisStorage[T]) Update(id uuid.UUID, thing T) (T, error) {
 	if err != nil {
 		return zeroValue, err
 	}
-
 	return thing, nil
 
 }
@@ -104,12 +98,14 @@ func (r *redisStorage[T]) setValueCache(key string, thing T) error {
 	ctx := context.Background()
 	serialized, err := json.Marshal(thing)
 	if err != nil {
-		return ErrMarshalingRecord
+		return StorageError{
+			Code:        ErrMarshalingEntity,
+			Description: fmt.Sprintf("error unmarshaling entity %q", err),
+		}
 	}
 	key = r.prefix + key
 	err = r.client.Set(ctx, key, string(serialized), 0).Err()
 	if err != nil {
-		slog.Error(err.Error())
 		return err
 	}
 
@@ -125,15 +121,20 @@ func (r *redisStorage[T]) getValueCache(key string) (T, error) {
 	// Handle error
 	var zeroValue T
 	if err != nil {
-		slog.Error(err.Error())
-		return zeroValue, ErrUserNotFound
+		return zeroValue, StorageError{
+			Code:        ErrEntityNotFound,
+			Description: fmt.Sprintf("cannot find entity with this id %q", key),
+		}
 	}
 	// Try to deserialized
 	deserialized := new(T)
 	err = json.Unmarshal([]byte(value), deserialized)
 	//Handle deserialized error
 	if err != nil {
-		return zeroValue, ErrUnmarshalingRecord
+		return zeroValue, StorageError{
+			Code:        ErrUnmarshalingEntity,
+			Description: fmt.Sprintf("cannot umarshal entity: %q", err),
+		}
 	}
 
 	return *deserialized, nil
@@ -153,7 +154,6 @@ func (r *redisStorage[T]) getAllValuesCache() ([]T, error) {
 		keys = append(keys, value)
 	}
 	if err := iter.Err(); err != nil {
-		slog.Error(err.Error())
 		return nil, err
 	}
 
@@ -163,8 +163,10 @@ func (r *redisStorage[T]) getAllValuesCache() ([]T, error) {
 	values, err := r.client.MGet(ctx, keys...).Result()
 
 	if err != nil {
-		slog.Error(err.Error())
-		return nil, ErrConsultingRecords
+		return nil, StorageError{
+			Code:        ErrGettingRecords,
+			Description: fmt.Sprintf("error getting all records %q", err),
+		}
 	}
 
 	for _, val := range values {
@@ -172,7 +174,10 @@ func (r *redisStorage[T]) getAllValuesCache() ([]T, error) {
 		currentThing := new(T)
 		err := json.Unmarshal([]byte(jsonValue), currentThing)
 		if err != nil {
-			return nil, err
+			return nil, StorageError{
+				Code:        ErrUnmarshalingEntity,
+				Description: fmt.Sprintf("error unmarshaling entity %q", err),
+			}
 		}
 
 		things = append(things, *currentThing)

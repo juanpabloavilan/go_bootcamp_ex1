@@ -1,14 +1,10 @@
 package db
 
 import (
-	"errors"
 	"example/bootcamp_ex1/entities"
+	"fmt"
 
 	"github.com/google/uuid"
-)
-
-var (
-	ErrUserNotFound = errors.New("cannot find a user with this id")
 )
 
 type memoryStorage[T entities.StorageObject] struct {
@@ -28,41 +24,44 @@ func (m *memoryStorage[T]) Create(thing T) (uuid.UUID, error) {
 }
 
 func (m *memoryStorage[T]) Get(key uuid.UUID) (T, error) {
+	var zeroValue T
 	value, ok := m.entities[key]
-	//If user doesn't exist we return a nil value and a error
+	//If tning doesn't exist we return a nil value and a error
 	if !ok {
-		var zeroValue T
-		return zeroValue, ErrUserNotFound
+		return zeroValue, StorageError{
+			Code:        ErrEntityNotFound,
+			Description: fmt.Sprintf("cannot find entity with id: %q", key),
+		}
 	}
 	return value, nil
 }
 
-func (u *memoryStorage[T]) GetAll() ([]T, error) {
-	userList := make([]T, 0, len(u.entities))
-	for _, user := range u.entities {
-		userList = append(userList, user)
+func (m *memoryStorage[T]) GetAll() ([]T, error) {
+	things := make([]T, 0, len(m.entities))
+	for _, t := range m.entities {
+		things = append(things, t)
 	}
-	return userList, nil
+	return things, nil
 }
 
-func (u *memoryStorage[T]) Update(key uuid.UUID, newUser T) (T, error) {
+func (m *memoryStorage[T]) Update(key uuid.UUID, thing T) (T, error) {
+	var zeroValue T
 	// If not exists return error
-	_, err := u.Get(key)
+	_, err := m.Get(key)
 	if err != nil {
-		var zeroValue T
-		return zeroValue, ErrUserNotFound
+		return zeroValue, err
 	}
-	u.entities[key] = newUser
+	m.entities[key] = thing
 
-	return u.entities[key], nil
+	return m.entities[key], nil
 }
-func (u *memoryStorage[T]) Delete(key uuid.UUID) (uuid.UUID, error) {
+func (m *memoryStorage[T]) Delete(key uuid.UUID) (uuid.UUID, error) {
 	// If not exists return error
-	_, err := u.Get(key)
+	_, err := m.Get(key)
 	if err != nil {
 		return uuid.Nil, err
 	}
 	// delete
-	delete(u.entities, key)
+	delete(m.entities, key)
 	return key, nil
 }

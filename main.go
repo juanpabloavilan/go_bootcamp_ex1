@@ -23,6 +23,8 @@ const (
 )
 
 func main() {
+	customLogger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(customLogger)
 	// Loading env variables
 	godotenv.Load()
 	slog.Info("ENVIRONMENT: ", os.Getenv(ENV_STAGE), os.Getenv(ENV_STORAGE))
@@ -46,11 +48,11 @@ func main() {
 	r := mux.NewRouter()
 	// Declaring user subrouter
 	userRouter := r.PathPrefix("/user").Subrouter()
-	userRouter.HandleFunc("/", handlers.GetAllUsers(userService)).Methods("GET")
-	userRouter.HandleFunc("/{id}", handlers.GetUserById(userService)).Methods("GET")
-	userRouter.HandleFunc("/", handlers.CreateUser(userService)).Methods("POST")
-	userRouter.HandleFunc("/{id}", handlers.UpdateUser(userService)).Methods("PUT")
-	userRouter.HandleFunc("/{id}", handlers.DeleteUser(userService)).Methods("DELETE")
+	userRouter.Handle("/", handlers.RootHandler(handlers.GetAllUsers(userService))).Methods("GET")
+	userRouter.Handle("/{id}", handlers.RootHandler(handlers.GetUserById(userService))).Methods("GET")
+	userRouter.Handle("/", handlers.RootHandler(handlers.CreateUser(userService))).Methods("POST")
+	userRouter.Handle("/{id}", handlers.RootHandler(handlers.UpdateUser(userService))).Methods("PUT")
+	userRouter.Handle("/{id}", handlers.RootHandler(handlers.DeleteUser(userService))).Methods("DELETE")
 
 	// Bind to a port and pass our router in
 	slog.Error(http.ListenAndServe(":8000", r).Error())
